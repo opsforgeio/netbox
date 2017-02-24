@@ -82,6 +82,13 @@ IFACE_FF_25GE_SFP28 = 1350
 IFACE_FF_40GE_QSFP_PLUS = 1400
 IFACE_FF_100GE_CFP = 1500
 IFACE_FF_100GE_QSFP28 = 1600
+# Link aggregation
+IFACE_FF_LAG_STATIC = 2000
+IFACE_FF_LAG_LACP_ACTIVE = 2101
+IFACE_FF_LAG_LACP_PASSIVE = 2102
+IFACE_FF_LAG_PAGP_DESIRABLE = 2201
+IFACE_FF_LAG_PAGP_AUTO = 2202
+IFACE_FF_LAG_MLPPP = 2700
 # Fibrechannel
 IFACE_FF_1GFC_SFP = 3010
 IFACE_FF_2GFC_SFP = 3020
@@ -132,6 +139,17 @@ IFACE_FF_CHOICES = [
         ]
     ],
     [
+        'Link aggregation',
+        [
+            [IFACE_FF_LAG_STATIC, 'Ethernet LAG (Static)'],
+            [IFACE_FF_LAG_LACP_ACTIVE, 'Ethernet LAG (LACP/Active)'],
+            [IFACE_FF_LAG_LACP_PASSIVE, 'Ethernet LAG (LACP/Passive)'],
+            [IFACE_FF_LAG_PAGP_DESIRABLE, 'Ethernet LAG (PAgP/Desirable)'],
+            [IFACE_FF_LAG_PAGP_AUTO, 'Ethernet LAG (PAgP/Auto)'],
+            [IFACE_FF_LAG_MLPPP, 'Multilink PPP (MLPPP)'],
+        ]
+    ],
+    [
         'FibreChannel',
         [
             [IFACE_FF_1GFC_SFP, 'SFP (1GFC)'],
@@ -147,6 +165,7 @@ IFACE_FF_CHOICES = [
             [IFACE_FF_T1, 'T1 (1.544 Mbps)'],
             [IFACE_FF_E1, 'E1 (2.048 Mbps)'],
             [IFACE_FF_T3, 'T3 (45 Mbps)'],
+            [IFACE_FF_E3, 'E3 (34 Mbps)'],
             [IFACE_FF_E3, 'E3 (34 Mbps)'],
         ]
     ],
@@ -166,6 +185,19 @@ IFACE_FF_CHOICES = [
         ]
     ],
 ]
+
+LAG_IFACE_TYPES = [
+    IFACE_FF_LAG_STATIC,
+    IFACE_FF_LAG_LACP_ACTIVE,
+    IFACE_FF_LAG_LACP_PASSIVE,
+    IFACE_FF_LAG_PAGP_DESIRABLE,
+    IFACE_FF_LAG_PAGP_AUTO,
+    IFACE_FF_LAG_MLPPP,
+]
+
+VIRTUAL_IFACE_TYPES = [
+    IFACE_FF_VIRTUAL,
+] + LAG_IFACE_TYPES
 
 STATUS_ACTIVE = True
 STATUS_OFFLINE = False
@@ -1062,6 +1094,10 @@ class Device(CreatedUpdatedModel, CustomFieldModel):
         return RPC_CLIENTS.get(self.platform.rpc_client)
 
 
+#
+# Console ports
+#
+
 @python_2_unicode_compatible
 class ConsolePort(models.Model):
     """
@@ -1090,6 +1126,10 @@ class ConsolePort(models.Model):
             self.get_connection_status_display(),
         ])
 
+
+#
+# Console server ports
+#
 
 class ConsoleServerPortManager(models.Manager):
 
@@ -1123,6 +1163,10 @@ class ConsoleServerPort(models.Model):
         return self.name
 
 
+#
+# Power ports
+#
+
 @python_2_unicode_compatible
 class PowerPort(models.Model):
     """
@@ -1152,6 +1196,10 @@ class PowerPort(models.Model):
         ])
 
 
+#
+# Power outlets
+#
+
 class PowerOutletManager(models.Manager):
 
     def get_queryset(self):
@@ -1178,6 +1226,10 @@ class PowerOutlet(models.Model):
         return self.name
 
 
+#
+# Interfaces
+#
+
 @python_2_unicode_compatible
 class Interface(models.Model):
     """
@@ -1185,6 +1237,8 @@ class Interface(models.Model):
     of an InterfaceConnection.
     """
     device = models.ForeignKey('Device', related_name='interfaces', on_delete=models.CASCADE)
+    lag = models.ForeignKey('self', related_name='member_interfaces', null=True, blank=True, on_delete=models.SET_NULL,
+                            verbose_name='LAG Interface')
     name = models.CharField(max_length=30)
     form_factor = models.PositiveSmallIntegerField(choices=IFACE_FF_CHOICES, default=IFACE_FF_10GE_SFP_PLUS)
     mac_address = MACAddressField(null=True, blank=True, verbose_name='MAC Address')
@@ -1203,15 +1257,34 @@ class Interface(models.Model):
 
     def clean(self):
 
-        if self.form_factor == IFACE_FF_VIRTUAL and self.is_connected:
+        # Virtual interfaces cannot be connected
+        if self.form_factor in VIRTUAL_IFACE_TYPES and self.is_connected:
             raise ValidationError({
                 'form_factor': "Virtual interfaces cannot be connected to another interface or circuit. Disconnect the "
                                "interface or choose a physical form factor."
             })
 
+        # An interface's LAG must belong to the same device
+        if self.lag and self.lag.device != self.device:
+            raise ValidationError({
+                'lag': "The selected LAG interface ({}) belongs to a different device ({}).".format(
+                    self.lag.name, self.lag.device.name
+                )
+            })
+
+        # A LAG interface cannot have a parent LAG
+        if self.form_factor in LAG_IFACE_TYPES and self.lag is not None:
+            raise ValidationError({
+                'lag': "{} interfaces cannot have a parent LAG interface.".format(self.get_form_factor_display())
+            })
+
     @property
-    def is_physical(self):
-        return self.form_factor != IFACE_FF_VIRTUAL
+    def is_virtual(self):
+        return self.form_factor in VIRTUAL_IFACE_TYPES
+
+    @property
+    def is_lag(self):
+        return self.form_factor in LAG_IFACE_TYPES
 
     @property
     def is_connected(self):
@@ -1275,6 +1348,10 @@ class InterfaceConnection(models.Model):
         ])
 
 
+#
+# Device bays
+#
+
 @python_2_unicode_compatible
 class DeviceBay(models.Model):
     """
@@ -1304,6 +1381,10 @@ class DeviceBay(models.Model):
         if self.device == self.installed_device:
             raise ValidationError("Cannot install a device into itself.")
 
+
+#
+# Modules
+#
 
 @python_2_unicode_compatible
 class Module(models.Model):
