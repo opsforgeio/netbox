@@ -1324,11 +1324,24 @@ class InterfaceCreateForm(DeviceComponentForm):
 
 class InterfaceBulkEditForm(BootstrapMixin, BulkEditForm):
     pk = forms.ModelMultipleChoiceField(queryset=Interface.objects.all(), widget=forms.MultipleHiddenInput)
+    device = forms.ModelChoiceField(queryset=Device.objects.all(), widget=forms.HiddenInput)
+    lag = forms.ModelChoiceField(queryset=Interface.objects.all(), required=False, label='Parent LAG')
     form_factor = forms.ChoiceField(choices=add_blank_choice(IFACE_FF_CHOICES), required=False)
     description = forms.CharField(max_length=100, required=False)
 
     class Meta:
-        nullable_fields = ['description']
+        nullable_fields = ['lag', 'description']
+
+    def __init__(self, *args, **kwargs):
+        super(InterfaceBulkEditForm, self).__init__(*args, **kwargs)
+
+        # Limit LAG choices to interfaces which belong to the parent device.
+        if self.initial.get('device'):
+            self.fields['lag'].queryset = Interface.objects.filter(
+                device=self.initial['device'], form_factor=IFACE_FF_LAG
+            )
+        else:
+            self.fields['lag'].choices = []
 
 
 #
