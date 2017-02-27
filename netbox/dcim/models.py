@@ -1243,7 +1243,7 @@ class Interface(models.Model):
         # An interface's LAG must belong to the same device
         if self.lag and self.lag.device != self.device:
             raise ValidationError({
-                'lag': "The selected LAG interface ({}) belongs to a different device ({}).".format(
+                'lag': u"The selected LAG interface ({}) belongs to a different device ({}).".format(
                     self.lag.name, self.lag.device.name
                 )
             })
@@ -1251,7 +1251,15 @@ class Interface(models.Model):
         # A LAG interface cannot have a parent LAG
         if self.form_factor == IFACE_FF_LAG and self.lag is not None:
             raise ValidationError({
-                'lag': "{} interfaces cannot have a parent LAG interface.".format(self.get_form_factor_display())
+                'lag': u"{} interfaces cannot have a parent LAG interface.".format(self.get_form_factor_display())
+            })
+
+        # Only a LAG can have LAG members
+        if self.form_factor != IFACE_FF_LAG and self.member_interfaces.exists():
+            raise ValidationError({
+                'form_factor': "Cannot change interface form factor; it has LAG members ({}).".format(
+                    u", ".join([iface.name for iface in self.member_interfaces.all()])
+                )
             })
 
     @property
