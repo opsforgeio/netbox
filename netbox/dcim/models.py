@@ -68,6 +68,7 @@ IFACE_ORDERING_CHOICES = [
 
 # Virtual
 IFACE_FF_VIRTUAL = 0
+IFACE_FF_LAG = 200
 # Ethernet
 IFACE_FF_100ME_FIXED = 800
 IFACE_FF_1GE_FIXED = 1000
@@ -82,13 +83,6 @@ IFACE_FF_25GE_SFP28 = 1350
 IFACE_FF_40GE_QSFP_PLUS = 1400
 IFACE_FF_100GE_CFP = 1500
 IFACE_FF_100GE_QSFP28 = 1600
-# Link aggregation
-IFACE_FF_LAG_STATIC = 2000
-IFACE_FF_LAG_LACP_ACTIVE = 2101
-IFACE_FF_LAG_LACP_PASSIVE = 2102
-IFACE_FF_LAG_PAGP_DESIRABLE = 2201
-IFACE_FF_LAG_PAGP_AUTO = 2202
-IFACE_FF_LAG_MLPPP = 2700
 # Fibrechannel
 IFACE_FF_1GFC_SFP = 3010
 IFACE_FF_2GFC_SFP = 3020
@@ -113,6 +107,7 @@ IFACE_FF_CHOICES = [
         'Virtual interfaces',
         [
             [IFACE_FF_VIRTUAL, 'Virtual'],
+            [IFACE_FF_LAG, 'Link Aggregation Group (LAG)'],
         ]
     ],
     [
@@ -136,17 +131,6 @@ IFACE_FF_CHOICES = [
             [IFACE_FF_40GE_QSFP_PLUS, 'QSFP+ (40GE)'],
             [IFACE_FF_100GE_CFP, 'CFP (100GE)'],
             [IFACE_FF_100GE_QSFP28, 'QSFP28 (100GE)'],
-        ]
-    ],
-    [
-        'Link aggregation',
-        [
-            [IFACE_FF_LAG_STATIC, 'Ethernet LAG (Static)'],
-            [IFACE_FF_LAG_LACP_ACTIVE, 'Ethernet LAG (LACP/Active)'],
-            [IFACE_FF_LAG_LACP_PASSIVE, 'Ethernet LAG (LACP/Passive)'],
-            [IFACE_FF_LAG_PAGP_DESIRABLE, 'Ethernet LAG (PAgP/Desirable)'],
-            [IFACE_FF_LAG_PAGP_AUTO, 'Ethernet LAG (PAgP/Auto)'],
-            [IFACE_FF_LAG_MLPPP, 'Multilink PPP (MLPPP)'],
         ]
     ],
     [
@@ -186,18 +170,10 @@ IFACE_FF_CHOICES = [
     ],
 ]
 
-LAG_IFACE_TYPES = [
-    IFACE_FF_LAG_STATIC,
-    IFACE_FF_LAG_LACP_ACTIVE,
-    IFACE_FF_LAG_LACP_PASSIVE,
-    IFACE_FF_LAG_PAGP_DESIRABLE,
-    IFACE_FF_LAG_PAGP_AUTO,
-    IFACE_FF_LAG_MLPPP,
-]
-
 VIRTUAL_IFACE_TYPES = [
     IFACE_FF_VIRTUAL,
-] + LAG_IFACE_TYPES
+    IFACE_FF_LAG,
+]
 
 STATUS_ACTIVE = True
 STATUS_OFFLINE = False
@@ -1238,7 +1214,7 @@ class Interface(models.Model):
     """
     device = models.ForeignKey('Device', related_name='interfaces', on_delete=models.CASCADE)
     lag = models.ForeignKey('self', related_name='member_interfaces', null=True, blank=True, on_delete=models.SET_NULL,
-                            verbose_name='LAG Interface')
+                            verbose_name='Parent LAG')
     name = models.CharField(max_length=30)
     form_factor = models.PositiveSmallIntegerField(choices=IFACE_FF_CHOICES, default=IFACE_FF_10GE_SFP_PLUS)
     mac_address = MACAddressField(null=True, blank=True, verbose_name='MAC Address')
@@ -1273,7 +1249,7 @@ class Interface(models.Model):
             })
 
         # A LAG interface cannot have a parent LAG
-        if self.form_factor in LAG_IFACE_TYPES and self.lag is not None:
+        if self.form_factor == IFACE_FF_LAG and self.lag is not None:
             raise ValidationError({
                 'lag': "{} interfaces cannot have a parent LAG interface.".format(self.get_form_factor_display())
             })
@@ -1284,7 +1260,7 @@ class Interface(models.Model):
 
     @property
     def is_lag(self):
-        return self.form_factor in LAG_IFACE_TYPES
+        return self.form_factor == IFACE_FF_LAG
 
     @property
     def is_connected(self):

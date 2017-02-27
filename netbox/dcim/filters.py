@@ -7,8 +7,8 @@ from extras.filters import CustomFieldFilterSet
 from tenancy.models import Tenant
 from utilities.filters import NullableModelMultipleChoiceFilter
 from .models import (
-    ConsolePort, ConsoleServerPort, Device, DeviceRole, DeviceType, Interface, InterfaceConnection, Manufacturer,
-    LAG_IFACE_TYPES, Platform, PowerOutlet, PowerPort, Rack, RackGroup, RackReservation, RackRole, Site,
+    ConsolePort, ConsoleServerPort, Device, DeviceRole, DeviceType, IFACE_FF_LAG, Interface, InterfaceConnection,
+    Manufacturer, Platform, PowerOutlet, PowerPort, Rack, RackGroup, RackReservation, RackRole, Site,
     VIRTUAL_IFACE_TYPES,
 )
 
@@ -390,8 +390,8 @@ class InterfaceFilter(django_filters.FilterSet):
             return queryset.exclude(form_factor__in=VIRTUAL_IFACE_TYPES)
         elif value == 'virtual':
             return queryset.filter(form_factor__in=VIRTUAL_IFACE_TYPES)
-        elif value == 'parent':
-            return queryset.filter(form_factor__in=LAG_IFACE_TYPES)
+        elif value == 'lag':
+            return queryset.filter(form_factor=IFACE_FF_LAG)
         return queryset
 
 

@@ -18,8 +18,8 @@ from .formfields import MACAddressFormField
 from .models import (
     DeviceBay, DeviceBayTemplate, CONNECTION_STATUS_CHOICES, CONNECTION_STATUS_PLANNED, CONNECTION_STATUS_CONNECTED,
     ConsolePort, ConsolePortTemplate, ConsoleServerPort, ConsoleServerPortTemplate, Device, DeviceRole, DeviceType,
-    Interface, IFACE_FF_CHOICES, IFACE_ORDERING_CHOICES, InterfaceConnection, InterfaceTemplate, Manufacturer, Module,
-    LAG_IFACE_TYPES, Platform, PowerOutlet, PowerOutletTemplate, PowerPort, PowerPortTemplate, RACK_TYPE_CHOICES,
+    Interface, IFACE_FF_CHOICES, IFACE_FF_LAG, IFACE_ORDERING_CHOICES, InterfaceConnection, InterfaceTemplate,
+    Manufacturer, Module, Platform, PowerOutlet, PowerOutletTemplate, PowerPort, PowerPortTemplate, RACK_TYPE_CHOICES,
     RACK_WIDTH_CHOICES, Rack, RackGroup, RackReservation, RackRole, Site, STATUS_CHOICES, SUBDEVICE_ROLE_CHILD,
     VIRTUAL_IFACE_TYPES
 )
@@ -1294,18 +1294,18 @@ class InterfaceForm(BootstrapMixin, forms.ModelForm):
         # Limit LAG choices to interfaces belonging to this device
         if self.is_bound:
             self.fields['lag'].queryset = Interface.objects.order_naturally().filter(
-                device_id=self.data['device'], form_factor__in=LAG_IFACE_TYPES
+                device_id=self.data['device'], form_factor=IFACE_FF_LAG
             )
         else:
             self.fields['lag'].queryset = Interface.objects.order_naturally().filter(
-                device=self.instance.device, form_factor__in=LAG_IFACE_TYPES
+                device=self.instance.device, form_factor=IFACE_FF_LAG
             )
 
 
 class InterfaceCreateForm(DeviceComponentForm):
     name_pattern = ExpandableNameField(label='Name')
     form_factor = forms.ChoiceField(choices=IFACE_FF_CHOICES)
-    lag = forms.ModelChoiceField(queryset=Interface.objects.all(), required=False, label='LAG Interface')
+    lag = forms.ModelChoiceField(queryset=Interface.objects.all(), required=False, label='Parent LAG')
     mac_address = MACAddressFormField(required=False, label='MAC Address')
     mgmt_only = forms.BooleanField(required=False, label='OOB Management')
     description = forms.CharField(max_length=100, required=False)
@@ -1316,7 +1316,7 @@ class InterfaceCreateForm(DeviceComponentForm):
         # Limit LAG choices to interfaces belonging to this device
         if self.device is not None:
             self.fields['lag'].queryset = Interface.objects.order_naturally().filter(
-                device=self.device, form_factor__in=LAG_IFACE_TYPES
+                device=self.device, form_factor=IFACE_FF_LAG
             )
         else:
             self.fields['lag'].queryset = Interface.objects.none()
